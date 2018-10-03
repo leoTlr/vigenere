@@ -22,22 +22,28 @@ int main(int argc, char *argv[]){
     std::istream* msg_stream;
     string filename;
     std::ifstream file;
+    size_t filesize=0;
 
     // decide if using stdin or file as input based on # arguments
     // msg_stream is either set to stdin or file
     switch (argc){
         case 2:
-            msg_stream = &std::cin;
+            msg_stream = &std::cin; // set msg_stream to stdin
             break;
         case 3:
             filename = argv[2];
-            file.open(argv[2]);
+            file.open(argv[2]); // TODO maybe put a semaphore on it
             if (!file) {
                 cerr << "[ERROR] could not open file: " << argv[2] << endl;
                 exit(EXIT_FAILURE);
             }
             if (file.is_open()){
-                msg_stream = static_cast<std::istream *>(&file);
+                // find out filesize 
+                file.seekg(0, file.end);
+                filesize = file.tellg();
+                file.seekg(0, file.beg);
+
+                msg_stream = static_cast<std::istream *>(&file); // set nsg_stream to file
             } else {
                 cerr << "[ERROR] could not open file: " << argv[2] << endl;
                 exit(EXIT_FAILURE);
@@ -64,8 +70,9 @@ int main(int argc, char *argv[]){
     }
 
     // reserve memory for output string based on inmput msg length to prevent reallocation
+    // only useful with file input, not stream from stdin
     string cipher_message;
-    cipher_message.reserve(msg_stream->gcount());
+    cipher_message.reserve(filesize);
 
     // translate char for char in in msg to cipher_msg
     // ignore non-alphabetical chars and convert upper- to loercase
