@@ -3,27 +3,28 @@
 # include <string>
 # include <array> // substitution table
 # include <algorithm> // transform() and remove_if() in prepare_key()
-# include <memory> // unique_ptr
+# include <memory> // shared_ptr
 
-using std::cout; using std::cerr; 
-using std::endl; using std::unique_ptr;
+using std::cout; using std::cerr; using std::endl;
+using std::shared_ptr; using std::string;
 
-const std::string alph = "abcdefghijklmnopqrstuvwxyz";
-std::array<std::string, 26> subst_table;
+const string alph = "abcdefghijklmnopqrstuvwxyz";
+std::array<string, 26> subst_table;
 
-unique_ptr<std::string> prepare_key(const std::string*);
-auto is_not_ascii_lower = [](char c){ return !((c>=97)&&(c<=122));};
-auto is_ascii_lower = [](char c){ return (c>=97)&&(c<=122);};
-auto is_ascii_upper = [](char c){ return (c>=65)&&(c<=90);};
-
+// functions for input validation
+auto is_not_ascii_lower = [](char c){ return !((c>=97)&&(c<=122));}; //used in prepare_key()
+auto is_ascii_lower = [](char c){ return (c>=97)&&(c<=122);}; // used in encryption process
+auto is_ascii_upper = [](char c){ return (c>=65)&&(c<=90);}; // ''
+const shared_ptr<string> prepare_key(const shared_ptr<string>);
 
 int main(int argc, char *argv[]){
 
     std::istream* msg_stream;
-    std::string filename;
+    string filename;
     std::ifstream file;
 
-    // decide if using stdin or file as input
+    // decide if using stdin or file as input based on # arguments
+    // msg_stream is either set to stdin or file
     switch (argc){
         case 2:
             msg_stream = &std::cin;
@@ -44,33 +45,39 @@ int main(int argc, char *argv[]){
             break;
         default:
             cerr << "usage: " << argv[0] << "  <key>  [file]" 
-                << "if no file provided as argument, msg is expected from stdin" << endl;
+                 << "if no file provided as argument, msg is expected from stdin" << endl;
             exit(EXIT_FAILURE);
-            break;
     } // TODO: more failsafe argument checking
 
-    const std::string raw_key = std::string(argv[1]); // TODO: also use smart pointers
-    const unique_ptr<std::string> key = prepare_key(&raw_key);
+    // prepare key for usage (convert to only ascii-lowercase)
+    const shared_ptr<string> raw_key = std::make_shared<string>(argv[1]);
+    const shared_ptr<string> key = prepare_key(raw_key);
     
     // build substitution-alphabets (ROT-n, 1<=n<=25)
     char pos;
     subst_table[0] = alph;
     for (auto it = alph.begin()+1; it < alph.end(); it++){
         pos = *it - 'a';
-        std::string subst_alph = alph.substr(pos, alph.length());
+        string subst_alph = alph.substr(pos, alph.length());
         subst_alph += alph.substr(0, pos);
         subst_table[pos] = subst_alph;
     }
 
-    std::string cipher_message = "";
+    // reserve memory for output string based on inmput msg length to prevent reallocation
+    string cipher_message;
+    cipher_message.reserve(msg_stream->gcount());
 
     // translate char for char in in msg to cipher_msg
     // ignore non-alphabetical chars and convert upper- to loercase
     char row, col, key_pos=0, key_char, msg_char;
     while (msg_stream->get(msg_char)){
+
+        // convert to lowercase first if needed
         if (is_ascii_upper(msg_char)){
-            msg_char -= 32; // convert to lowercase
+            msg_char -= 32;
         }
+
+        // actual char encryption
         if (is_ascii_lower(msg_char)){
             key_char = key->at(key_pos);
             row = key_char - 'a'; // ASCII(lower) char -'a' -> 0-25
@@ -78,6 +85,8 @@ int main(int argc, char *argv[]){
             cipher_message += subst_table[row][col];
             key_pos = (++key_pos)%key->length(); // iterate over key for as long as needed
         }
+
+        // continue with next char if not ascii lowercase
     }
 
     cout << cipher_message << endl;
@@ -85,30 +94,28 @@ int main(int argc, char *argv[]){
     return EXIT_SUCCESS;
 }
 
-unique_ptr<std::string> prepare_key(const std::string* str){
+const shared_ptr<string> prepare_key(const shared_ptr<string> str){
     // convert key to only ascii-lowercase letters
 
-    unique_ptr<std::string> ret_str = std::make_unique<std::string>(*str);
-
-    if (ret_str->empty()){
+    if (str->empty()){
         cerr << "[ERROR] key empty. exiting" << endl;
         exit(EXIT_FAILURE);
     }
 
     // make lowercase
-    std::transform(ret_str->begin(), ret_str->end(), ret_str->begin(), tolower);
+    std::transform(str->begin(), str->end(), str->begin(), tolower);
 
     // remove non-(lowercase)letters (ASCII)
-    ret_str->erase(std::remove_if(ret_str->begin(), ret_str->end(), is_not_ascii_lower), ret_str->end());
+    str->erase(std::remove_if(str->begin(), str->end(), is_not_ascii_lower), str->end());
 
-    if (!ret_str) {
+    if (!str) {
         cerr << "[ERROR] key preparation" << endl;
         exit(EXIT_FAILURE);
     }
-    if (ret_str->empty()){
+    if (str->empty()){
         cerr << "[ERROR] empty key after removing non-letters. exiting" << endl;
         exit(EXIT_FAILURE);
     }
 
-    return ret_str;
+    return str;
 }
